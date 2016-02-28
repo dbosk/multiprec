@@ -1,0 +1,271 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[british]{babel}
+\usepackage[noend]{algpseudocode}
+\usepackage{algorithmicx}
+
+\usepackage{noweb}
+% Needed to relax penalty for breaking code chunks across pages, otherwise 
+% there might be a lot of space following a code chunk.
+\def\nwendcode{\endtrivlist \endgroup}
+\let\nwdocspar=\smallbreak
+
+\usepackage{xparse}
+\usepackage{mleftright}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\DeclareMathOperator{\N}{\mathbb{N}}
+\DeclareMathOperator{\Z}{\mathbb{Z}}
+\NewDocumentCommand{\floor}{m}{\mleft\lfloor #1 \mright\rfloor}
+\NewDocumentCommand{\ceil}{m}{\mleft\lceil #1 \mright\rceil}
+
+\usepackage[capitalize]{cleveref}
+
+\usepackage{acro}
+\DeclareAcronym{CPU}{%
+  short = {CPU},
+  long = {central processing unit},
+}
+\DeclareAcronym{STL}{%
+  short = {STL},
+  long = {standard template library},
+}
+
+\usepackage[natbib,style=alphabetic,maxbibnames=99]{biblatex}
+\addbibresource{multiprec.bib}
+
+\title{Multiple-Precision Integer Arithmetic}
+\author{Daniel Bosk}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\clearpage
+@
+
+\section{Introduction}
+
+This is the documented source code for a program doing multiple-precision 
+integer arithmetic, the focus is thus on integer arithmetic --- so no floating 
+points will be covered.
+The program that you are about to read is written using literate 
+programming~\cite{LiterateProgramming}.
+We use in particular the tool NOWEB~\cite{NOWEB}, which is among the simplest 
+of the literate programming tools available.
+
+We will use three files in this program: [[<<multiprec.mk>>]] followed by 
+[[<<multiprec.h>>]] and [[<<multiprec.cpp>>]].
+The first one is a file to instruct the make(1) utility on how to build the 
+object files and executables from the main source files.
+The two last files are the main source files, written in C++.
+
+The file [[<<multiprec.mk>>]] will be structured as follows:
+<<multiprec.mk>>=
+<<make variables>>
+<<make targets>>
+@ We will populate these blocks with variable definition and targets as we need
+them.
+We can start with a variable definition we already know.
+<<make variables>>=
+OBJ=    multiprec.o
+@ That is, the object file of the main source file [[<<multiprec.cpp>>]].
+And similarly our main target.
+<<make targets>>=
+multiprec.o: multiprec.cpp multiprec.h
+@
+
+Out main code will be a class [[Integer]], so the header file should have the 
+following format:
+<<multiprec.h>>=
+#ifndef _INTEGER_H_
+<<includes>>
+<<helper function declarations>>
+class Integer {
+  private:
+  <<Integer attributes>>
+  public:
+  <<Integer methods>>
+};
+#endif
+@ Its methods will be implemented in [[<<multiprec.cpp>>]].
+But we will also need to implement some helper functions:
+<<multiprec.cpp>>=
+#include "multiprec.h"
+<<helper functions>>
+<<Integer methods implementations>>
+@
+
+
+\section{Integer addition}
+
+We want to do general integer additions.
+All \acp{CPU} have built-in support for doing integer arithmetic modulo 
+\(2^n\), where \(n = 8, 16, 32, 64, \ldots\).
+E.g.\ using [[uint64_t]] from [[cstdint]].
+For efficiency reasons we would like to take advantage of these operations.
+So we want to string together several [[uint64_t]] to one long \(n\)-bit 
+integer, then when we want to add [[uint64_t x[]]] and [[uint64_t y[]]] 
+together, we simply add [[x[i] + y[i]]].
+
+The thing we must take into consideration here is overflowing.
+When we add two 64-bit integers, they might overflow.
+E.g.\ we might do the addition \((2^{64} - 1) + (2^{64} - 1) = 2\cdot 2^{64} 
+- 2 > 2^{64} - 1\).
+If the addition [[x[i] + y[i]]] overflows, that overflow should go to
+[[x[i+1] + y[i+1]]] --- so we need to capture this overflow.
+To be able to do this we must first know how large can this overflow be?
+
+\begin{theorem}\label{MaximumCarry}
+  For any base \(b\in \N\), the maximum overflow when adding two integers is 
+  one digit.
+  More exactly the overflow will be at most \(1\).
+\end{theorem}
+\begin{proof}
+  If the base of a number is \(b\), then the digits range from \(0\) to 
+  \(b-1\).
+  If we take the largest digit two times, we get
+  \begin{align}
+    (b-1) + (b-1) &= 2(b-1) = 2b - 2 \\
+    \label{Carry} &= 1\cdot b + (b-2).
+  \end{align}
+  We can see in \cref{Carry} that the resulting carry was \(1\).
+  Even with an added carry of \(1\) we see that the carry can never exceed 
+  \(1\):
+  \begin{align}
+    1 + (b-1) + (b-1) &= 1 + 2(b-1) \\
+    &= 1 + 1\cdot b + (b-2) \\
+    &= 1\cdot b + (b-1).
+  \end{align}
+  This concludes the proof.
+\end{proof}
+
+We can now conclude from \cref{MaximumCarry} that in our computers, the largest 
+carry will be one bit.
+Thus we can use [[int64_t]] instead of [[uint64_t]] and let the sign bit be our 
+carry bit.
+A simple algorithm is presented in \cref{DetectOverflow}.
+
+\begin{figure}
+  \framebox{%
+  \begin{minipage}{0.99\textwidth}
+  \begin{algorithmic}
+    \Function{DetectOverflow}{$a, b$}
+      \If{$a\geq 0 \land b\geq 0$}
+        \State{\Return{$a + b < 0$}}
+      \EndIf{}
+      \State{\Return{$\bot$}}
+      \Comment{If one is negative we don't know what to say.}
+    \EndFunction{}
+  \end{algorithmic}
+  \end{minipage}
+  }
+  \caption{%
+    An algorithm to detect overflow using the sign bit.
+  }\label{DetectOverflow}
+\end{figure}
+
+We can implement it in our program as a helper function:
+<<helper functions>>=
+template <class i>
+bool DetectOverflow(const i &a, const i &b, const i &c) {
+  if (a < 0 || b < 0)
+    throw std::exception("Undefined behaviour");
+  return (c < 0);
+}
+@ This function will throw and exception if either of the two operands are 
+negative.
+Thus we need to include [[<exception>]] from the \ac{STL}.
+<<includes>>=
+#include <exception>
+@ And we must add the function declaration:
+<<helper function declarations>>=
+template <class i>
+bool DetectOverflow(const i &a, const i &b, const i &c);
+@
+
+Another approach would we to predict overflows.
+Then we would not need to rely on the sign bit, and thus we can use all 64 bits
+of the [[uint64_t]].
+We can use the following theorem to predict when an addition will overflow.
+
+\begin{theorem}
+  Two \(n\)-digit integers \(x = x_0 + \cdots + x_{n-1}b^{n-1}\) and \(y = y_0 
+  + \cdots + y_{n-1}b^{n-1}\) written in base \(b\) will not overflow when
+  \begin{equation}
+    \label{NoOverflow}
+    b - \max\{x_{n-1}, y_{n-1}\} \geq \min\{x_{n-1}, y_{n-1}\} - 1.
+  \end{equation}
+  unless we have equality and \(x_{n-2} + y_{n-2}\) overflows.
+\end{theorem}
+\begin{proof}
+  Let \(s = \max\{x_{n-1}, y_{n-1}\}\) and \(t = \min\{x_{n-1}, y_{n-1}\}\).
+  \cref{NoOverflow} says that \(b - s\geq t - 1\).
+  We can simply rewrite this to \(s + t \leq b - 1\) and thus see that we can 
+  never get an overflow.
+  However, if we have equality, \(s + t = b - 1\) and \(x_{n-2} + y_{n-2}\) 
+  overflows, we know from \cref{MaximumCarry} that we will get a carry of 
+  \(1\).
+  This yields \(s + t + 1 = b - 1\iff s + t = b\) and we can get an overflow.
+\end{proof}
+
+We can use this theorem to implement another helper function.
+The pseudocode can be found in \cref{PredictOverflow}.
+
+\begin{figure}
+  \framebox{%
+  \begin{minipage}{0.99\textwidth}
+  \begin{algorithmic}
+    \Function{PredictOverflow}{$a, b$}
+      \Comment{Assume carry already added to $a$.}
+      \State{$s\gets \max\{a, b\}$}
+      \State{$t\gets \min\{a, b\}$}
+      \If{$b - s \geq t - 1$}
+        \State{\Return{False}}
+      \EndIf{}
+      \State{\Return{True}}
+    \EndFunction{}
+  \end{algorithmic}
+  \end{minipage}
+  }
+  \caption{%
+    A simple algorithm to predict overflow without using the sign bit.
+  }\label{PredictOverflow}
+\end{figure}
+
+Assuming that we use unsigned integers, we can implement this in C++ in the 
+following way:
+<<helper functions>>=
+template <class ui>
+bool PredictOverflow(const ui &a, const ui &b) {
+  auto s = std::max(a, b);
+  auto t = std::min(a, b);
+  if (static_cast<ui>(-1) - s > t)
+    return false;
+  return true;
+}
+@ Consequently we need this declaration:
+<<helper function declarations>>=
+template <class ui>
+bool PredictOverflow(const ui &a, const ui &b);
+@
+
+
+\section{Integer multiplication}
+
+\dots
+
+
+
+\section*{Acknowledgements}
+
+This program is licensed under the following MIT license:
+\begin{quote}
+\input{LICENSE}
+\end{quote}
+
+
+\printbibliography{}
+\end{document}
