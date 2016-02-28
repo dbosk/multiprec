@@ -172,14 +172,14 @@ We can implement it in our program as a helper function:
 template <class i>
 bool DetectOverflow(const i &a, const i &b, const i &c) {
   if (a < 0 || b < 0)
-    throw std::exception("Undefined behaviour");
+    throw std::domain_error("Undefined behaviour");
   return (c < 0);
 }
-@ This function will throw and exception if either of the two operands are 
-negative.
-Thus we need to include [[<exception>]] from the \ac{STL}.
+@ This function will throw a [[domain_error]] exception if either of the two 
+operands is negative.
+Thus we need to include [[<stdexcept>]] from the \ac{STL}.
 <<includes>>=
-#include <exception>
+#include <stdexcept>
 @ And we must add the function declaration:
 <<helper function declarations>>=
 template <class i>
