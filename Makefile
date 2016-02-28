@@ -1,10 +1,13 @@
 .PHONY: all
 all: multiprec.pdf multiprec.cpp multiprec.h
 
-multiprec.pdf: multiprec.nw
+multiprec.pdf: multiprec.nw LICENSE
+
+.PHONY: clean
+clean:
+	${RM} multiprec.pdf multiprec.cpp multiprec.h multiprec.mk
 
 multiprec.mk: multiprec.nw
-
 include multiprec.mk
 
 INCLUDE_MAKEFILES=makefiles
