@@ -56,46 +56,58 @@ programming~\cite{LiterateProgramming}.
 We use in particular the tool NOWEB~\cite{NOWEB}, which is among the simplest 
 of the literate programming tools available.
 
-We will use three files in this program: [[<<multiprec.mk>>]] followed by 
-[[<<multiprec.h>>]] and [[<<multiprec.cpp>>]].
-The first one is a file to instruct the make(1) utility on how to build the 
-object files and executables from the main source files.
-The two last files are the main source files, written in C++.
+We will use the following files in this program:
+\begin{itemize}
+\item [[<<multiprec.mk>>]]
+\item [[<<multiprec.h>>]] and [[<<multiprec.cpp>>]]
+\item [[<<tests.cpp>>]]
+\end{itemize}
 
-The file [[<<multiprec.mk>>]] will be structured as follows:
+[[<<multiprec.mk>>]] is a file to instruct the make(1) utility on how to build 
+the object files and executables from the main source files.
+It will be structured as follows:
 <<multiprec.mk>>=
 <<make variables>>
 <<make targets>>
 @ We will populate these blocks with variable definition and targets as we need
 them.
-We can start with a variable definition we already know.
+
+[[<<multiprec.h>>]] and [[<<multiprec.cpp>>]] are the main files.
+They will contain the code for a class [[Integer]].
+The header file will follow the standard format:
+<<multiprec.h>>=
+#ifndef _INTEGER_H_
+<<header includes>>
+<<function declarations>>
+<<classes>>
+#endif
+@ Its functions and methods will be defined in [[<<multiprec.cpp>>]].
+But we will also need to implement some helper functions:
+<<multiprec.cpp>>=
+<<definition includes>>
+#include "multiprec.h"
+<<function definitions>>
+<<class method definitions>>
+@
+
+We can now start populating our make file:
 <<make variables>>=
-OBJ=    multiprec.o
+OBJ+=    multiprec.o
 @ That is, the object file of the main source file [[<<multiprec.cpp>>]].
 And similarly our main target.
 <<make targets>>=
 multiprec.o: multiprec.cpp multiprec.h
 @
 
-Out main code will be a class [[Integer]], so the header file should have the 
-following format:
-<<multiprec.h>>=
-#ifndef _INTEGER_H_
-<<includes>>
-<<helper function declarations>>
+Now that we know the overall structure of our files, we can add the main class 
+definition:
+<<classes>>=
 class Integer {
   private:
   <<Integer attributes>>
   public:
   <<Integer methods>>
 };
-#endif
-@ Its methods will be implemented in [[<<multiprec.cpp>>]].
-But we will also need to implement some helper functions:
-<<multiprec.cpp>>=
-#include "multiprec.h"
-<<helper functions>>
-<<Integer methods implementations>>
 @
 
 
@@ -168,7 +180,7 @@ A simple algorithm is presented in \cref{DetectOverflow}.
 \end{figure}
 
 We can implement it in our program as a helper function:
-<<helper functions>>=
+<<function definitions>>=
 template <class i>
 bool DetectOverflow(const i &a, const i &b, const i &c) {
   if (a < 0 || b < 0)
@@ -178,10 +190,11 @@ bool DetectOverflow(const i &a, const i &b, const i &c) {
 @ This function will throw a [[domain_error]] exception if either of the two 
 operands is negative.
 Thus we need to include [[<stdexcept>]] from the \ac{STL}.
-<<includes>>=
+However, we only need it for the definition, not the declaration.
+<<definition includes>>=
 #include <stdexcept>
-@ And we must add the function declaration:
-<<helper function declarations>>=
+@ And then we must add the function declaration:
+<<function declarations>>=
 template <class i>
 bool DetectOverflow(const i &a, const i &b, const i &c);
 @
@@ -208,7 +221,7 @@ We can use the following theorem to predict when an addition will overflow.
   However, if we have equality, \(s + t = b - 1\) and \(x_{n-2} + y_{n-2}\) 
   overflows, we know from \cref{MaximumCarry} that we will get a carry of 
   \(1\).
-  This yields \(s + t + 1 = b - 1\iff s + t = b\) and we can get an overflow.
+  This yields \(s + t + 1 = b - 1\iff s + t = b\) and we get an overflow.
 \end{proof}
 
 We can use this theorem to implement another helper function.
@@ -237,7 +250,7 @@ The pseudocode can be found in \cref{PredictOverflow}.
 
 Assuming that we use unsigned integers, we can implement this in C++ in the 
 following way:
-<<helper functions>>=
+<<function definitions>>=
 template <class ui>
 bool PredictOverflow(const ui &a, const ui &b) {
   auto s = std::max(a, b);
@@ -247,7 +260,7 @@ bool PredictOverflow(const ui &a, const ui &b) {
   return true;
 }
 @ Consequently we need this declaration:
-<<helper function declarations>>=
+<<function declarations>>=
 template <class ui>
 bool PredictOverflow(const ui &a, const ui &b);
 @
