@@ -2,6 +2,7 @@
 all: multiprec.pdf multiprec.cpp multiprec.h
 
 multiprec.pdf: multiprec.nw LICENSE
+multiprec.pdf: efficiency-overflow.nw
 
 .PHONY: clean
 clean:

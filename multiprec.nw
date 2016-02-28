@@ -1,4 +1,4 @@
-\documentclass{article}
+\documentclass[a4paper]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[british]{babel}
@@ -16,7 +16,15 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{amsthm}
+
+\newtheorem{lemma}{Lemma}
 \newtheorem{theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
+\newtheorem{proposition}{Proposition}
+
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}
+
 \DeclareMathOperator{\N}{\mathbb{N}}
 \DeclareMathOperator{\Z}{\mathbb{Z}}
 \NewDocumentCommand{\floor}{m}{\mleft\lfloor #1 \mright\rfloor}
@@ -58,9 +66,9 @@ of the literate programming tools available.
 
 We will use the following files in this program:
 \begin{itemize}
-\item [[<<multiprec.mk>>]]
-\item [[<<multiprec.h>>]] and [[<<multiprec.cpp>>]]
-\item [[<<tests.cpp>>]]
+  \item [[<<multiprec.mk>>]]
+  \item [[<<multiprec.h>>]] and [[<<multiprec.cpp>>]]
+  %\item [[<<tests.cpp>>]]
 \end{itemize}
 
 [[<<multiprec.mk>>]] is a file to instruct the make(1) utility on how to build 
@@ -99,6 +107,8 @@ And similarly our main target.
 multiprec.o: multiprec.cpp multiprec.h
 @
 
+%[[<<tests.cpp>>]] contains a main function and a it runs a set of unit tests.
+
 Now that we know the overall structure of our files, we can add the main class 
 definition:
 <<classes>>=
@@ -109,6 +119,7 @@ class Integer {
   <<Integer methods>>
 };
 @
+
 
 
 \section{Integer addition}
@@ -122,7 +133,10 @@ So we want to string together several [[uint64_t]] to one long \(n\)-bit
 integer, then when we want to add [[uint64_t x[]]] and [[uint64_t y[]]] 
 together, we simply add [[x[i] + y[i]]].
 
-The thing we must take into consideration here is overflowing.
+\subsection{Handling overflows}
+
+The thing we must take into consideration when adding two numbers is 
+overflowing.
 When we add two 64-bit integers, they might overflow.
 E.g.\ we might do the addition \((2^{64} - 1) + (2^{64} - 1) = 2\cdot 2^{64} 
 - 2 > 2^{64} - 1\).
@@ -159,6 +173,15 @@ carry will be one bit.
 Thus we can use [[int64_t]] instead of [[uint64_t]] and let the sign bit be our 
 carry bit.
 A simple algorithm is presented in \cref{DetectOverflow}.
+
+\begin{remark}\label{LargeDigits}
+  Note that we need not set the base \(b = 2\) just because we are working with 
+  binary circuits in our computer.
+  It actually serves our purposes better to use \(b = 2^l\) if we are working 
+  with \(l\)-bit numbers, e.g.\ \(b = 2^{64}\) in our example of [[uint64_t]].
+  We can view each such block of bits as one digit in a larger \(n\)-digit 
+  number (if we use \(n\) [[uint64_t]] blocks).
+\end{remark}
 
 \begin{figure}
   \framebox{%
@@ -253,8 +276,8 @@ following way:
 <<function definitions>>=
 template <class ui>
 bool PredictOverflow(const ui &a, const ui &b) {
-  auto s = std::max(a, b);
-  auto t = std::min(a, b);
+  ui s = std::max(a, b);
+  ui t = std::min(a, b);
   if (static_cast<ui>(-1) - s > t)
     return false;
   return true;
@@ -264,6 +287,66 @@ bool PredictOverflow(const ui &a, const ui &b) {
 template <class ui>
 bool PredictOverflow(const ui &a, const ui &b);
 @
+
+We should evaluate the performance of our two methods, to determine whether 
+using the sign bit (\cref{DetectOverflow}) or not (\cref{PredictOverflow}) is 
+more efficient.
+This is done in \cref{DetectAndPredictEfficiency}.
+
+\subsection{Adding two integers}
+
+Chapter 9 of~\cite{Matematik1} proves the addition algorithm (the one taught in 
+primary school) for arbitrary bases \(b\).
+This together with \Cref{LargeDigits} allows us to easily construct an addition 
+algorithm for the \(l\)-bit digits we have available in our computers.
+
+\begin{figure}
+  \framebox{%
+  \begin{minipage}{0.99\textwidth}
+    \begin{algorithmic}
+      \Function{Add}{$a, b$}
+        \State{$\sigma\gets \max\{a, b\}$.}
+        \Comment{This will be our resulting sum.}
+        \State{$\alpha\gets \min\{a, b\}$.}
+        \State{$c\gets 0$}
+        \Comment{This will hold the carry.}
+        \For{$i\gets 0, \ldots, |\min\{a, b\}|-1$}
+          \Comment{$|\cdot|$ returns the number of digits.}
+          \If{$c\neq 0$}
+            \If{$\lnot \textsc{PredictOverflow}(\sigma[i], 1)$}
+              \State{$c\gets 0$}
+            \EndIf{}
+            \State{$\sigma[i]\gets \sigma[i] + 1$}
+          \EndIf{}
+          \If{$\textsc{PredictOverflow}(\sigma[i], \alpha[i])$}
+            \State{$c\gets 1$}
+          \EndIf{}
+          \State{$\sigma[i]\gets c[i] + \alpha[i]$}
+        \EndFor{}
+        \If{$c\neq 0$}
+          \State{$\sigma[|\sigma|]\gets 1$}
+          \Comment{Add a new most-significant digit.}
+        \EndIf{}
+        \State{\Return{$\sigma$}}
+      \EndFunction{}
+    \end{algorithmic}
+  \end{minipage}
+  }
+  \caption{%
+    A general addition algorithm.
+  }\label{AdditionAlgorithm}
+\end{figure}
+
+We have summarized the standard algorithm for addition in 
+\cref{AdditionAlgorithm}.
+Now we proceed with its implementation in C++.
+We would like to implement our addition algorithm as an overloaded operator for 
+our class.
+\dots
+
+\subsection{Computational complexity}
+
+\dots
 
 
 \section{Integer multiplication}
@@ -281,4 +364,9 @@ This program is licensed under the following MIT license:
 
 
 \printbibliography{}
+
+
+\appendix
+\input{efficiency-overflow.nw}
+
 \end{document}
